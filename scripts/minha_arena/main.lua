@@ -10,6 +10,9 @@ local FIREBALL_RADIUS = 0.5
 local FIREBALL_SPAWN_OFFSET = 1.0
 local HIT_RADIUS = 3.0
 
+-- Configurações de movimento
+local PLAYER_SPEED = 5.0
+
 -- Função para verificar se uma entidade é um jogador
 local function is_player(entity_id)
     local kind = Loci.get_entity_property(entity_id, "kind")
@@ -32,6 +35,12 @@ function on_player_join(entity_id)
     Loci.Commands.set_property(entity_id, "hp", "100")
     Loci.Commands.set_property(entity_id, "kind", "player")
     Loci.Commands.set_property(entity_id, "team", "1")
+end
+
+-- Callback quando o jogador tenta se mover
+function on_move_intent(entity_id, dir_x, dir_y)
+    Loci.Commands.set_velocity(entity_id, {x = dir_x * PLAYER_SPEED, y = dir_y * PLAYER_SPEED})
+    return true
 end
 
 -- Callback quando um jogador usa uma habilidade
