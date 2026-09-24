@@ -2,7 +2,7 @@
 -- Supports both Player Mode and Spectator Mode (Free Cam & Entity Follow)
 
 package.path = package.path .. ";../../sdks/love2d/?.lua;../../sdks/love2d/lib/?.lua;sdks/love2d/?.lua;sdks/love2d/lib/?.lua;./?.lua;./lib/?.lua"
-package.cpath = package.cpath .. ";../../sdks/love2d/lib/?.so;../../sdks/love2d/?.so;sdks/love2d/lib/?.so;sdks/love2d/?.so;./?.so;./lib/?.so"
+package.cpath = package.cpath .. ";../../sdks/love2d/lib/?.so;../../sdks/love2d/?.so;sdks/love2d/lib/?.so;sdks/love2d/lib/?.so;./?.so;./lib/?.so"
 local loci = require("loci_client")
 
 local last_status = "Connecting to server..."
@@ -42,13 +42,256 @@ local static_obstacles = {
     { type = "aabb", min = { x = 5, y = 15 }, max = { x = 10, y = 20 } },
 }
 
+-- ============================================================
+-- Colisão de skills (projéteis somem ao bater em qualquer coisa)
+-- ============================================================
+local PROJECTILE_RADIUS = 0.8 -- raio do fireball (8px / 10)
+local ENTITY_RADIUS = 1.6     -- raio dos players (16px / 10)
+local BEAM_LEN = 4.5          -- tamanho do flash de cast em unidades (45px / 10)
+
+local projectile_state = {}   -- [id] = { px, py, owner, dead }
+
+local function is_projectile(ent)
+    return ent.blueprint == "fireball" or (ent.properties and ent.properties.kind == "fireball")
+end
+
+-- Segmento vs AABB (slab). Retorna t de entrada (0..1) ou nil
+local function seg_vs_aabb(x0, y0, x1, y1, minx, miny, maxx, maxy)
+    local dx, dy = x1 - x0, y1 - y0
+    local t0, t1 = 0, 1
+
+    if math.abs(dx) < 1e-9 then
+        if x0 < minx or x0 > maxx then return nil end
+    else
+        local ta, tb = (minx - x0) / dx, (maxx - x0) / dx
+        if ta > tb then ta, tb = tb, ta end
+        t0, t1 = math.max(t0, ta), math.min(t1, tb)
+        if t0 > t1 then return nil end
+    end
+
+    if math.abs(dy) < 1e-9 then
+        if y0 < miny or y0 > maxy then return nil end
+    else
+        local ta, tb = (miny - y0) / dy, (maxy - y0) / dy
+        if ta > tb then ta, tb = tb, ta end
+        t0, t1 = math.max(t0, ta), math.min(t1, tb)
+        if t0 > t1 then return nil end
+    end
+
+    return t0
+end
+
+-- Segmento vs círculo. Retorna t de entrada (0..1) ou nil
+local function seg_vs_circle(x0, y0, x1, y1, cx, cy, r)
+    local dx, dy = x1 - x0, y1 - y0
+    local fx, fy = x0 - cx, y0 - cy
+    local c = fx * fx + fy * fy - r * r
+    if c <= 0 then return 0 end
+    local a = dx * dx + dy * dy
+    if a < 1e-12 then return nil end
+    local b = fx * dx + fy * dy
+    local disc = b * b - a * c
+    if disc < 0 then return nil end
+    local t = (-b - math.sqrt(disc)) / a
+    if t >= 0 and t <= 1 then return t end
+    return nil
+end
+
+-- Primeiro impacto ao longo do segmento (paredes, obstáculos e entidades).
+-- Retorna t (0..1) ou nil. ignore_id = dono da skill (não colide com ele).
+local function first_hit_t(x0, y0, x1, y1, radius, ignore_id)
+    local best = nil
+
+    for _, obs in ipairs(static_obstacles) do
+        local t
+        if obs.type == "aabb" then
+            t = seg_vs_aabb(x0, y0, x1, y1,
+                obs.min.x - radius, obs.min.y - radius,
+                obs.max.x + radius, obs.max.y + radius)
+        else
+            t = seg_vs_circle(x0, y0, x1, y1, obs.center.x, obs.center.y, obs.radius + radius)
+        end
+        if t and (not best or t < best) then best = t end
+    end
+
+    for _, e in ipairs(loci.get_entities()) do
+        if e.id ~= ignore_id and not is_projectile(e) then
+            local t = seg_vs_circle(x0, y0, x1, y1, e.x, e.y, ENTITY_RADIUS + radius)
+            if t and (not best or t < best) then best = t end
+        end
+    end
+
+    return best
+end
+
+-- Dono da skill = entidade não-projétil mais próxima no spawn
+local function find_owner(proj)
+    local best_id, best_d2 = nil, 9 -- até 3 unidades
+    for _, e in ipairs(loci.get_entities()) do
+        if not is_projectile(e) then
+            local d2 = (e.x - proj.x) ^ 2 + (e.y - proj.y) ^ 2
+            if d2 < best_d2 then best_id, best_d2 = e.id, d2 end
+        end
+    end
+    return best_id
+end
+
+local function is_projectile_dead(ent)
+    local st = projectile_state[ent.id]
+    return st ~= nil and st.dead
+end
+
+local TRAIL_LIFE = 0.35
+local impact_fx = {} -- explosões de impacto (coordenadas de mundo)
+
+local function spawn_impact(x, y)
+    local sparks = {}
+    for i = 1, 12 do
+        local a = math.random() * math.pi * 2
+        sparks[i] = { dx = math.cos(a), dy = math.sin(a), speed = 25 + math.random() * 45 }
+    end
+    table.insert(impact_fx, { x = x, y = y, age = 0, life = 0.45, sparks = sparks })
+end
+
+local function update_projectiles(dt)
+    for _, e in ipairs(loci.get_entities()) do
+        if is_projectile(e) then
+            local st = projectile_state[e.id]
+            if not st then
+                st = { px = e.x, py = e.y, owner = find_owner(e), dead = false, trail = {}, dx = 0, dy = 0 }
+                projectile_state[e.id] = st
+            end
+
+            -- Envelhece a trilha (continua sumindo mesmo depois do impacto)
+            local trail = st.trail
+            for i = #trail, 1, -1 do
+                trail[i].age = trail[i].age + dt
+                if trail[i].age > TRAIL_LIFE then table.remove(trail, i) end
+            end
+
+            if not st.dead then
+                -- Teste "swept": do frame anterior até agora (não atravessa parede fina)
+                local t = first_hit_t(st.px, st.py, e.x, e.y, PROJECTILE_RADIUS, st.owner)
+                if t then
+                    st.dead = true
+                    spawn_impact(st.px + (e.x - st.px) * t, st.py + (e.y - st.py) * t)
+                else
+                    local mx, my = e.x - st.px, e.y - st.py
+                    local len = math.sqrt(mx * mx + my * my)
+                    if len > 0.01 then
+                        st.dx, st.dy = mx / len, my / len
+                        table.insert(trail, {
+                            x = e.x, y = e.y, age = 0,
+                            ox = (math.random() - 0.5) * 2, oy = (math.random() - 0.5) * 2,
+                        })
+                    end
+                    st.px, st.py = e.x, e.y
+                end
+            end
+        end
+    end
+
+    for i = #impact_fx, 1, -1 do
+        impact_fx[i].age = impact_fx[i].age + dt
+        if impact_fx[i].age >= impact_fx[i].life then table.remove(impact_fx, i) end
+    end
+end
+
+-- Desenha trilha + cabeça de fogo do projétil (blend aditivo = brilho)
+local function draw_fireball(ent, pos_x, pos_y, cam_x, cam_y, cx, cy)
+    local st = projectile_state[ent.id]
+    local t = love.timer.getTime()
+    love.graphics.setBlendMode("add")
+
+    if st then
+        for _, p in ipairs(st.trail) do
+            local k = 1 - p.age / TRAIL_LIFE
+            local sx = cx + (p.x - cam_x) * 10
+            local sy = cy + (p.y - cam_y) * 10
+            love.graphics.setColor(1.0, 0.2 + 0.45 * k, 0.03, 0.30 * k)
+            love.graphics.circle("fill", sx, sy, 3 + 9 * k)
+            -- fagulha que se afasta da trilha
+            love.graphics.setColor(1.0, 0.9, 0.4, 0.9 * k)
+            love.graphics.circle("fill", sx + p.ox * p.age * 30, sy + p.oy * p.age * 30, 0.5 + 1.8 * k)
+        end
+    end
+
+    if not (st and st.dead) then
+        local flick = 1 + 0.12 * math.sin(t * 30 + ent.id * 1.7) + 0.06 * math.sin(t * 47 + ent.id)
+
+        -- Línguas de fogo atrás da bola (oposto à direção do movimento)
+        if st and (st.dx ~= 0 or st.dy ~= 0) then
+            local dx, dy = st.dx, st.dy
+            local nx, ny = -dy, dx
+            for i = 1, 3 do
+                local wob = math.sin(t * 25 + i * 2.1 + ent.id) * 3
+                local len = (18 + i * 5) * flick
+                local w = 8 - i * 1.5
+                love.graphics.setColor(1.0, 0.35 + i * 0.12, 0.05, 0.38)
+                love.graphics.polygon("fill",
+                    pos_x + nx * w, pos_y + ny * w,
+                    pos_x - nx * w, pos_y - ny * w,
+                    pos_x - dx * len + nx * wob, pos_y - dy * len + ny * wob)
+            end
+        end
+
+        -- Camadas de brilho: halo -> corpo -> núcleo quente
+        love.graphics.setColor(1.0, 0.30, 0.05, 0.10)
+        love.graphics.circle("fill", pos_x, pos_y, 32 * flick)
+        love.graphics.setColor(1.0, 0.45, 0.05, 0.20)
+        love.graphics.circle("fill", pos_x, pos_y, 21 * flick)
+        love.graphics.setColor(1.0, 0.60, 0.10, 0.60)
+        love.graphics.circle("fill", pos_x, pos_y, 13 * flick)
+        love.graphics.setColor(1.0, 0.85, 0.30, 0.95)
+        love.graphics.circle("fill", pos_x, pos_y, 8.5 * flick)
+        love.graphics.setColor(1.0, 1.0, 0.85, 1.0)
+        love.graphics.circle("fill", pos_x, pos_y, 4.5)
+    end
+
+    love.graphics.setBlendMode("alpha")
+end
+
+local function draw_impacts(cam_x, cam_y, cx, cy)
+    love.graphics.setBlendMode("add")
+    for _, fx in ipairs(impact_fx) do
+        local k = fx.age / fx.life
+        local sx = cx + (fx.x - cam_x) * 10
+        local sy = cy + (fx.y - cam_y) * 10
+
+        love.graphics.setColor(1.0, 0.75, 0.25, (1 - k) * 0.85)
+        love.graphics.circle("fill", sx, sy, 8 + 22 * k)
+
+        love.graphics.setColor(1.0, 0.45, 0.10, 1 - k)
+        love.graphics.setLineWidth(1 + 3 * (1 - k))
+        love.graphics.circle("line", sx, sy, 6 + 34 * k)
+        love.graphics.setLineWidth(1)
+
+        for _, s in ipairs(fx.sparks) do
+            love.graphics.setColor(1.0, 0.85, 0.35, 1 - k)
+            love.graphics.circle("fill", sx + s.dx * s.speed * k, sy + s.dy * s.speed * k, 0.5 + 2 * (1 - k))
+        end
+    end
+    love.graphics.setBlendMode("alpha")
+end
+
+local RESPAWN_DELAY = 2.0  -- segundos até tentar voltar depois de morrer
+local RESPAWN_RETRY = 1.5  -- intervalo entre tentativas
+local respawn_timer = nil  -- nil = vivo
+local respawn_attempts = 0
+local last_my_x, last_my_y = 0, 0
+
 local function get_cam_pos()
     local my_entity = loci.get_my_entity()
     if my_entity then
+        last_my_x, last_my_y = my_entity.x, my_entity.y
         return my_entity.x, my_entity.y
+    end
+    if not is_spectator_cli and respawn_timer then
+        return last_my_x, last_my_y -- câmera fica onde morreu
     end
     return spec_cam_x, spec_cam_y
 end
+
 
 function love.load(args)
     -- Check CLI args for spectator flag
@@ -70,29 +313,38 @@ function love.load(args)
     last_status = is_spectator_cli and "Connected as Spectator" or ("Connected as '" .. client_name .. "'")
 
     -- Set up callbacks for game events
+    -- (verbose per-event prints removed — they were flooding stdout every
+    --  network tick and tanking the framerate; keep only real error logs)
     loci.on_entity_spawned = function(entity)
-        print("New entity spawned:", entity.id)
     end
 
     loci.on_entity_despawned = function(entity_id)
-        print("Entity despawned:", entity_id)
+        projectile_state[entity_id] = nil
+        if not is_spectator_cli and loci.my_entity_id == entity_id then
+            respawn_timer = RESPAWN_DELAY
+            respawn_attempts = 0
+        end
         if following_entity_id == entity_id then
             following_entity_id = nil
         end
     end
 
     loci.on_property_changed = function(entity, key, old_val, new_val)
-        print("Property changed for " .. tostring(entity.id) .. ": " .. tostring(key) .. " = " .. tostring(new_val))
+        -- was printing on every property change (fires per-entity, per-tick) -> huge stdout spam -> fps drop
     end
 
     loci.on_action_cast = function(entity, ability_id, dir_x, dir_y)
-        local ent_id = entity and entity.id or "?"
-        print(string.format("Action cast by %s (ability=%d, dir=[%.2f, %.2f])", tostring(ent_id), ability_id, dir_x, dir_y))
+        local fx_x = entity and entity.x or 0
+        local fx_y = entity and entity.y or 0
+        local hit_t = first_hit_t(fx_x, fx_y, fx_x + dir_x * BEAM_LEN, fx_y + dir_y * BEAM_LEN,
+            PROJECTILE_RADIUS, entity and entity.id)
         table.insert(visual_fx, {
-            x = entity and entity.x or 0,
-            y = entity and entity.y or 0,
+            x = fx_x,
+            y = fx_y,
             dir_x = dir_x,
             dir_y = dir_y,
+            len_t = hit_t or 1,
+            blocked = hit_t ~= nil,
             ability_id = ability_id,
             lifetime = 0.35,
             max_lifetime = 0.35,
@@ -100,13 +352,11 @@ function love.load(args)
     end
 
     loci.on_match_state_changed = function(state, winner)
-        print("Match state changed to: " .. tostring(state) .. " winner: " .. tostring(winner))
         match_banner = "MATCH " .. string.upper(state) .. (winner ~= "" and (" (Winner: " .. winner .. ")") or "")
         match_banner_timer = 4.0
     end
 
     loci.on_intent_rejected = function(reason)
-        print("Server rejected our action:", reason)
         rejection_msg = "Action Failed: " .. reason
         rejection_timer = 3.0 -- Show message for 3 seconds
     end
@@ -156,7 +406,7 @@ function love.mousepressed(x, y, button)
     local center_y = love.graphics.getHeight() / 2
 
     -- Avoid clicking through the HUD overlay
-    if x >= 10 and x <= 480 and y >= 10 and y <= 175 then
+    if x >= 10 and x <= 480 and y >= 10 and y <= 165 then
         return
     end
 
@@ -221,6 +471,7 @@ end
 function love.update(dt)
     -- Process network packets and update state
     loci.update(dt)
+    update_projectiles(dt)
 
     if is_spectator_cli then
         -- Spectator mode free camera & follow logic
@@ -244,8 +495,24 @@ function love.update(dt)
     else
         local my_entity = loci.get_my_entity()
         if my_entity then
+            respawn_timer = nil
             -- Process robust input polling for player entity
             update_movement()
+        elseif respawn_timer then
+            last_sent_dx, last_sent_dy = 0, 0 -- reenvia o movimento ao renascer
+            respawn_timer = respawn_timer - dt
+            if respawn_timer <= 0 then
+                respawn_attempts = respawn_attempts + 1
+                if respawn_attempts % 2 == 1 then
+                    -- tentativa 1, 3, 5...: novo join na mesma sessão
+                    loci._send_intent({ join = { player_name = loci._player_name, schema_version = loci.SCHEMA_VERSION } })
+                else
+                    -- tentativa 2, 4, 6...: reconecta do zero
+                    loci.disconnect("respawn")
+                    loci.connect(server_ip, server_port, loci._player_name, "../../sdks/love2d/lib/")
+                end
+                respawn_timer = RESPAWN_RETRY
+            end
         end
     end
 
@@ -293,19 +560,19 @@ function love.draw()
 
     -- Draw static obstacles (walls and obstacles) with alarming color
     love.graphics.setColor(1.0, 0.3, 0.1, 0.85) -- Bright orange/red alarming color
-    
+
     for _, obs in ipairs(static_obstacles) do
         if obs.type == "aabb" then
             local min_screen_x = center_x + (obs.min.x - cam_x) * 10
             local min_screen_y = center_y + (obs.min.y - cam_y) * 10
             local max_screen_x = center_x + (obs.max.x - cam_x) * 10
             local max_screen_y = center_y + (obs.max.y - cam_y) * 10
-            
-            love.graphics.rectangle("fill", min_screen_x, min_screen_y, 
+
+            love.graphics.rectangle("fill", min_screen_x, min_screen_y,
                                     max_screen_x - min_screen_x, max_screen_y - min_screen_y)
             love.graphics.setColor(1.0, 0.6, 0.2, 0.95) -- Lighter border
             love.graphics.setLineWidth(2)
-            love.graphics.rectangle("line", min_screen_x, min_screen_y, 
+            love.graphics.rectangle("line", min_screen_x, min_screen_y,
                                     max_screen_x - min_screen_x, max_screen_y - min_screen_y)
             love.graphics.setLineWidth(1)
             love.graphics.setColor(1.0, 0.3, 0.1, 0.85) -- Reset to fill color
@@ -313,7 +580,7 @@ function love.draw()
             local center_screen_x = center_x + (obs.center.x - cam_x) * 10
             local center_screen_y = center_y + (obs.center.y - cam_y) * 10
             local screen_radius = obs.radius * 10
-            
+
             love.graphics.circle("fill", center_screen_x, center_screen_y, screen_radius)
             love.graphics.setColor(1.0, 0.6, 0.2, 0.95) -- Lighter border
             love.graphics.setLineWidth(2)
@@ -330,11 +597,8 @@ function love.draw()
         local pos_y = center_y + (entity.y - cam_y) * 10
 
         -- Render fireballs as green glowing circles
-        if entity.blueprint == "fireball" or (entity.properties and entity.properties.kind == "fireball") then
-            love.graphics.setColor(0.2, 1.0, 0.2, 1.0)
-            love.graphics.circle("fill", pos_x, pos_y, 8)
-            love.graphics.setColor(0.7, 1.0, 0.3, 0.8)
-            love.graphics.circle("line", pos_x, pos_y, 12)
+        if is_projectile(entity) then
+            draw_fireball(entity, pos_x, pos_y, cam_x, cam_y, center_x, center_y)
         else
             -- Direct typed property access (Phase 6.5.3-1)
             local team = entity.team
@@ -368,7 +632,7 @@ function love.draw()
         local text_width = font:getWidth(label)
         love.graphics.setColor(1, 1, 1)
         love.graphics.print(label, pos_x - text_width / 2, pos_y - 32)
-        
+
         -- Draw HP if it exists (using direct typed property access)
         local hp = entity.hp
         if hp and (not is_spectating or following_entity_id ~= entity.id) then
@@ -378,13 +642,16 @@ function love.draw()
         end  -- End of non-fireball rendering
     end
 
+    -- Explosões de impacto das skills
+    draw_impacts(cam_x, cam_y, center_x, center_y)
+
     -- Render transient action visual effects (Phase 6.5.3-1)
     for _, fx in ipairs(visual_fx) do
         local alpha = math.max(0, fx.lifetime / fx.max_lifetime)
         local start_x = center_x + (fx.x - cam_x) * 10
         local start_y = center_y + (fx.y - cam_y) * 10
-        local end_x = start_x + (fx.dir_x * 45)
-        local end_y = start_y + (fx.dir_y * 45)
+        local end_x = start_x + (fx.dir_x * 45 * fx.len_t)
+        local end_y = start_y + (fx.dir_y * 45 * fx.len_t)
 
         if fx.ability_id == 1 then
             love.graphics.setColor(1, 0.85, 0.2, alpha) -- Ability 1: Yellow Beam
@@ -394,10 +661,16 @@ function love.draw()
             love.graphics.setLineWidth(5)
         end
         love.graphics.line(start_x, start_y, end_x, end_y)
-        
+
         -- Add green ball at the end of the beam (fireball visual)
-        love.graphics.setColor(0.2, 1.0, 0.2, alpha) -- Bright green
-        love.graphics.circle("fill", end_x, end_y, 8 * alpha)
+        if not fx.blocked then
+            love.graphics.setBlendMode("add")
+            love.graphics.setColor(1.0, 0.55, 0.1, alpha * 0.5)
+            love.graphics.circle("fill", end_x, end_y, 14 * alpha)
+            love.graphics.setColor(1.0, 0.9, 0.5, alpha)
+            love.graphics.circle("fill", end_x, end_y, 6 * alpha)
+            love.graphics.setBlendMode("alpha")
+        end
         love.graphics.setLineWidth(1)
     end
 
@@ -415,6 +688,15 @@ function love.draw()
         local font = love.graphics.getFont()
         local tw = font:getWidth(match_banner)
         love.graphics.print(match_banner, center_x - tw / 2, mb_y + 8)
+    end
+
+    -- Aviso de morte / respawn
+    if not is_spectating and not my_entity and respawn_timer then
+        love.graphics.setColor(0, 0, 0, 0.45)
+        love.graphics.rectangle("fill", 0, center_y - 30, love.graphics.getWidth(), 60)
+        love.graphics.setColor(1, 0.3, 0.3)
+        love.graphics.printf(string.format("VOCÊ MORREU - respawn em %.1fs", math.max(0, respawn_timer)),
+            0, center_y - 8, love.graphics.getWidth(), "center")
     end
 
     -- Top Center Spectator Pill / Banner (Unmistakable visual indicator)
