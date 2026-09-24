@@ -402,6 +402,15 @@ where
         })?;
         commands_table.set("add_static_obstacle", add_static_obstacle)?;
 
+        let cmd_buf_bounds = Rc::clone(&cmd_buffer_rc);
+        let set_map_bounds = scope.create_function(move |_, (min_val, max_val): (mlua::Value, mlua::Value)| {
+            let min = extract_vector2(min_val)?;
+            let max = extract_vector2(max_val)?;
+            cmd_buf_bounds.borrow_mut().push(Command::SetMapBounds { min, max });
+            Ok(())
+        })?;
+        commands_table.set("set_map_bounds", set_map_bounds)?;
+
         loci_table.set("Commands", commands_table)?;
 
         // Execute the user's closure

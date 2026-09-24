@@ -3,7 +3,7 @@ local fireballs = {}
 local current_tick = 0
 
 -- Configurações da fireball
-local FIREBALL_SPEED = 20.0
+local FIREBALL_SPEED = 10.0
 local FIREBALL_LIFETIME = 120  -- ticks (~4 segundos)
 local FIREBALL_DAMAGE = 10
 local FIREBALL_RADIUS = 0.5
@@ -11,7 +11,7 @@ local FIREBALL_SPAWN_OFFSET = 1.0
 local HIT_RADIUS = 3.0
 
 -- Configurações de movimento
-local PLAYER_SPEED = 5.0
+local PLAYER_SPEED = 2.0
 
 -- Configurações de colisão
 local SOLID_WALL = 1
@@ -44,6 +44,9 @@ end
 
 -- Inicialização da arena - criar obstáculos estáticos
 function on_init()
+    -- Define o mapa como 100x100 (de -50 a 50)
+    Loci.Commands.set_map_bounds({x = -50, y = -50}, {x = 50, y = 50})
+    
     -- Paredes do mapa 100x100 (de -50 a 50, com espessura 2)
     Loci.Commands.add_static_obstacle({
         shape = { type = "aabb", min = { x = -52, y = -50 }, max = { x = -50, y = 50 } },

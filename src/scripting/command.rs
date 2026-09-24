@@ -58,6 +58,10 @@ pub enum Command {
     AddStaticObstacle {
         obstacle: StaticObstacle,
     },
+    SetMapBounds {
+        min: DeterministicVector2,
+        max: DeterministicVector2,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -216,6 +220,9 @@ impl CommandBuffer {
                 }
                 Command::AddStaticObstacle { obstacle } => {
                     instance.static_obstacles.insert(obstacle.id, obstacle);
+                }
+                Command::SetMapBounds { min, max } => {
+                    instance.map_bounds = crate::world::physics::map::MapBounds::new(min, max);
                 }
             }
         }
