@@ -21,6 +21,27 @@ local following_entity_id = nil
 local is_dragging = false
 local drag_last_x, drag_last_y = 0, 0
 
+-- Static obstacles for 100x100 map (manual definition since server doesn't send them)
+local static_obstacles = {
+    -- Walls (100x100 map from -50 to 50, with 2 unit thickness)
+    { type = "aabb", min = { x = -52, y = -50 }, max = { x = -50, y = 50 } },  -- Left wall
+    { type = "aabb", min = { x = 50, y = -50 }, max = { x = 52, y = 50 } },    -- Right wall
+    { type = "aabb", min = { x = -50, y = -52 }, max = { x = 50, y = -50 } },  -- Top wall
+    { type = "aabb", min = { x = -50, y = 50 }, max = { x = 50, y = 52 } },    -- Bottom wall
+    -- Central circle obstacle
+    { type = "circle", center = { x = 0, y = 0 }, radius = 5.0 },
+    -- Corner obstacles
+    { type = "aabb", min = { x = -30, y = -30 }, max = { x = -25, y = -25 } },
+    { type = "aabb", min = { x = 25, y = -30 }, max = { x = 30, y = -25 } },
+    { type = "aabb", min = { x = -30, y = 25 }, max = { x = -25, y = 30 } },
+    { type = "aabb", min = { x = 25, y = 25 }, max = { x = 30, y = 30 } },
+    -- Middle obstacles
+    { type = "aabb", min = { x = -10, y = -20 }, max = { x = -5, y = -15 } },
+    { type = "aabb", min = { x = 5, y = -20 }, max = { x = 10, y = -15 } },
+    { type = "aabb", min = { x = -10, y = 15 }, max = { x = -5, y = 20 } },
+    { type = "aabb", min = { x = 5, y = 15 }, max = { x = 10, y = 20 } },
+}
+
 local function get_cam_pos()
     local my_entity = loci.get_my_entity()
     if my_entity then
@@ -269,6 +290,38 @@ function love.draw()
     love.graphics.line(origin_screen_x - 50, origin_screen_y, origin_screen_x + 50, origin_screen_y)
     love.graphics.line(origin_screen_x, origin_screen_y - 50, origin_screen_x, origin_screen_y + 50)
     love.graphics.print("(0, 0)", origin_screen_x + 5, origin_screen_y + 5)
+
+    -- Draw static obstacles (walls and obstacles) with alarming color
+    love.graphics.setColor(1.0, 0.3, 0.1, 0.85) -- Bright orange/red alarming color
+    
+    for _, obs in ipairs(static_obstacles) do
+        if obs.type == "aabb" then
+            local min_screen_x = center_x + (obs.min.x - cam_x) * 10
+            local min_screen_y = center_y + (obs.min.y - cam_y) * 10
+            local max_screen_x = center_x + (obs.max.x - cam_x) * 10
+            local max_screen_y = center_y + (obs.max.y - cam_y) * 10
+            
+            love.graphics.rectangle("fill", min_screen_x, min_screen_y, 
+                                    max_screen_x - min_screen_x, max_screen_y - min_screen_y)
+            love.graphics.setColor(1.0, 0.6, 0.2, 0.95) -- Lighter border
+            love.graphics.setLineWidth(2)
+            love.graphics.rectangle("line", min_screen_x, min_screen_y, 
+                                    max_screen_x - min_screen_x, max_screen_y - min_screen_y)
+            love.graphics.setLineWidth(1)
+            love.graphics.setColor(1.0, 0.3, 0.1, 0.85) -- Reset to fill color
+        elseif obs.type == "circle" then
+            local center_screen_x = center_x + (obs.center.x - cam_x) * 10
+            local center_screen_y = center_y + (obs.center.y - cam_y) * 10
+            local screen_radius = obs.radius * 10
+            
+            love.graphics.circle("fill", center_screen_x, center_screen_y, screen_radius)
+            love.graphics.setColor(1.0, 0.6, 0.2, 0.95) -- Lighter border
+            love.graphics.setLineWidth(2)
+            love.graphics.circle("line", center_screen_x, center_screen_y, screen_radius)
+            love.graphics.setLineWidth(1)
+            love.graphics.setColor(1.0, 0.3, 0.1, 0.85) -- Reset to fill color
+        end
+    end
 
     -- Render all entities from the authoritative world state
     local current_entities = loci.get_entities()
