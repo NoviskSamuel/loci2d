@@ -3,7 +3,7 @@ local fireballs = {}
 local current_tick = 0
 
 -- Configurações da fireball
-local FIREBALL_SPEED = 10.0
+local FIREBALL_SPEED = 5.0
 local FIREBALL_LIFETIME = 120  -- ticks (~4 segundos)
 local FIREBALL_DAMAGE = 10
 local FIREBALL_RADIUS = 0.5
@@ -11,7 +11,7 @@ local FIREBALL_SPAWN_OFFSET = 1.0
 local HIT_RADIUS = 3.0
 
 -- Configurações de movimento
-local PLAYER_SPEED = 2.0
+local PLAYER_SPEED = 1.0
 
 -- Configurações de colisão
 local SOLID_WALL = 1
@@ -177,6 +177,7 @@ function on_action(entity_id, ability_id, aim_x, aim_y)
                 entity_type = "Prop",
                 move_speed = FIREBALL_SPEED,
                 radius = FIREBALL_RADIUS,
+                collision_filter = { layer = PROJECTILE, mask = SOLID_WALL },
                 properties = {
                     owner = tostring(entity_id),
                     kind = "fireball"

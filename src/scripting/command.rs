@@ -1,6 +1,7 @@
 use crate::world::instance::DeterministicVector2;
 use crate::world::instance::{ActiveTimer, Instance, MatchState};
 use crate::world::physics::map::StaticObstacle;
+use crate::world::physics::map::CollisionFilter;
 
 use fixed::types::I16F16;
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,6 +14,7 @@ pub enum Command {
         move_speed: I16F16,
         radius: I16F16,
         properties: std::collections::BTreeMap<String, String>,
+        collision_filter: Option<CollisionFilter>,
     },
     DestroyEntity {
         entity_id: u64,
@@ -90,6 +92,7 @@ impl CommandBuffer {
                     move_speed,
                     radius,
                     properties,
+                    collision_filter,
                 } => {
                     let parsed_type = match entity_type.as_str() {
                         "Player" => crate::world::entity::EntityType::Player,
@@ -112,6 +115,10 @@ impl CommandBuffer {
                     )
                     .with_default_navigation(move_speed, I16F16::from_num(1))
                     .with_circle_collider(radius);
+                    
+                    if let Some(filter) = collision_filter {
+                        entity.collision_filter = filter;
+                    }
                     
                     for (k, v) in properties {
                         entity.properties.insert(k, v);

@@ -236,6 +236,14 @@ where
                     properties.insert(k, v);
                 }
             }
+            
+            let collision_filter = if let Ok(filter_table) = args.get::<mlua::Table>("collision_filter") {
+                let layer: u16 = filter_table.get("layer").unwrap_or(2);
+                let mask: u16 = filter_table.get("mask").unwrap_or(15);
+                Some(CollisionFilter::new(layer, mask))
+            } else {
+                None
+            };
 
             let entity_id = instance.allocate_entity_id();
 
@@ -247,6 +255,7 @@ where
                 move_speed: fixed::types::I16F16::from_num(move_speed),
                 radius: fixed::types::I16F16::from_num(radius),
                 properties,
+                collision_filter,
             });
             Ok(entity_id)
         })?;
