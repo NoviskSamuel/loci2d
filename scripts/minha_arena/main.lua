@@ -28,7 +28,7 @@ end
 local function apply_damage(entity_id, damage)
     local current_hp = Loci.get_entity_property(entity_id, "hp") or 100
     local new_hp = current_hp - damage
-    Loci.set_entity_property(entity_id, "hp", new_hp)
+    Loci.Commands.set_property(entity_id, "hp", tostring(new_hp))
     
     if new_hp <= 0 then
         Loci.Commands.destroy_entity(entity_id)
@@ -212,23 +212,38 @@ function on_tick(tick)
     end
 
     local alive = {}
+    local destroyed = {}
+    
     for _, fb in ipairs(fireballs) do
         local keep = true
         local pos = Loci.get_entity_position(fb.id)
 
         if not pos or tick >= fb.expires_at then
-            Loci.Commands.destroy_entity(fb.id)
+            if not destroyed[fb.id] then
+                Loci.Commands.destroy_entity(fb.id)
+                destroyed[fb.id] = true
+            end
             keep = false
         else
-            -- Verificar colisão manual com jogadores (evita colisão física que pode travar)
+            -- Verificar colisão manual com jogadores e outras fireballs
             local near = Loci.get_entities_in_radius(pos, HIT_RADIUS)
             for _, id in ipairs(near) do
-                if keep and id ~= fb.id and id ~= fb.owner then
+                if keep and id ~= fb.id and id ~= fb.owner and not destroyed[id] then
                     local entity_kind = Loci.get_entity_property(id, "kind")
                     if is_player(id) then
                         apply_damage(id, FIREBALL_DAMAGE)
-                        Loci.Commands.destroy_entity(fb.id)
+                        if not destroyed[fb.id] then
+                            Loci.Commands.destroy_entity(fb.id)
+                            destroyed[fb.id] = true
+                        end
                         keep = false
+                    elseif entity_kind == "fireball" then
+                        -- Destruir apenas a fireball com ID menor para evitar conflito
+                        if fb.id < id and not destroyed[fb.id] then
+                            Loci.Commands.destroy_entity(fb.id)
+                            destroyed[fb.id] = true
+                            keep = false
+                        end
                     end
                 end
             end
