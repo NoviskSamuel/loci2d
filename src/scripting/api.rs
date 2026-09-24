@@ -1,5 +1,7 @@
 use crate::scripting::command::{Command, CommandBuffer};
 use crate::world::instance::{DeterministicVector2, Instance};
+use crate::world::physics::primitives::ColliderShape;
+use crate::world::physics::map::{StaticObstacle, CollisionFilter};
 use mlua::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -19,6 +21,40 @@ fn extract_vector2(value: mlua::Value) -> LuaResult<DeterministicVector2> {
             Ok(DeterministicVector2::from_f64(x, y))
         }
         _ => Err(mlua::Error::RuntimeError("Expected Loci.Vector2 or table with x, y".to_string())),
+    }
+}
+
+fn extract_collider_shape(value: mlua::Value) -> LuaResult<ColliderShape> {
+    match value {
+        mlua::Value::Table(t) => {
+            let shape_type: String = t.get("type")
+                .map_err(|_| mlua::Error::RuntimeError("Collider shape missing 'type' field".to_string()))?;
+            
+            match shape_type.as_str() {
+                "circle" => {
+                    let center_val: mlua::Value = t.get("center")
+                        .map_err(|_| mlua::Error::RuntimeError("Circle shape missing 'center' field".to_string()))?;
+                    let center = extract_vector2(center_val)?;
+                    let radius: f64 = t.get("radius")
+                        .map_err(|_| mlua::Error::RuntimeError("Circle shape missing 'radius' field".to_string()))?;
+                    Ok(ColliderShape::Circle(crate::world::physics::primitives::DeterministicCircle::new(
+                        center,
+                        fixed::types::I16F16::from_num(radius)
+                    )))
+                }
+                "aabb" => {
+                    let min_val: mlua::Value = t.get("min")
+                        .map_err(|_| mlua::Error::RuntimeError("AABB shape missing 'min' field".to_string()))?;
+                    let min = extract_vector2(min_val)?;
+                    let max_val: mlua::Value = t.get("max")
+                        .map_err(|_| mlua::Error::RuntimeError("AABB shape missing 'max' field".to_string()))?;
+                    let max = extract_vector2(max_val)?;
+                    Ok(ColliderShape::AABB(crate::world::physics::primitives::DeterministicAABB::new(min, max)))
+                }
+                _ => Err(mlua::Error::RuntimeError(format!("Unknown collider shape type: {}", shape_type)))
+            }
+        }
+        _ => Err(mlua::Error::RuntimeError("Expected table for collider shape".to_string()))
     }
 }
 
@@ -344,6 +380,27 @@ where
             Ok(())
         })?;
         commands_table.set("start_timer", start_timer)?;
+
+        let cmd_buf_obstacle = Rc::clone(&cmd_buffer_rc);
+        let add_static_obstacle = scope.create_function(move |_, args: mlua::Table| {
+            let shape_val: mlua::Value = args.get("shape")
+                .map_err(|_| mlua::Error::RuntimeError("Static obstacle missing 'shape' field".to_string()))?;
+            let shape = extract_collider_shape(shape_val)?;
+            
+            let layer: u16 = args.get("layer").unwrap_or(1);
+            let mask: u16 = args.get("mask").unwrap_or(10);
+            let is_solid: bool = args.get("is_solid").unwrap_or(true);
+            
+            let filter = CollisionFilter::new(layer, mask);
+            let obstacle_id = instance.allocate_entity_id();
+            
+            let obstacle = StaticObstacle::new(obstacle_id, shape, filter, is_solid);
+            
+            cmd_buf_obstacle.borrow_mut().push(Command::AddStaticObstacle { obstacle });
+            
+            Ok(obstacle_id)
+        })?;
+        commands_table.set("add_static_obstacle", add_static_obstacle)?;
 
         loci_table.set("Commands", commands_table)?;
 

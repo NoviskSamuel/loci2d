@@ -1,5 +1,6 @@
 use crate::world::instance::DeterministicVector2;
 use crate::world::instance::{ActiveTimer, Instance, MatchState};
+use crate::world::physics::map::StaticObstacle;
 
 use fixed::types::I16F16;
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,6 +54,9 @@ pub enum Command {
     StartTimer {
         timer_id: String,
         remaining_ticks: u32,
+    },
+    AddStaticObstacle {
+        obstacle: StaticObstacle,
     },
 }
 
@@ -209,6 +213,9 @@ impl CommandBuffer {
                             remaining_ticks,
                         },
                     );
+                }
+                Command::AddStaticObstacle { obstacle } => {
+                    instance.static_obstacles.insert(obstacle.id, obstacle);
                 }
             }
         }

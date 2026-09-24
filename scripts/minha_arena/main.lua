@@ -13,6 +13,11 @@ local HIT_RADIUS = 3.0
 -- Configurações de movimento
 local PLAYER_SPEED = 5.0
 
+-- Configurações de colisão
+local SOLID_WALL = 1
+local PLAYER = 2
+local PROJECTILE = 8
+
 -- Função para verificar se uma entidade é um jogador
 local function is_player(entity_id)
     local kind = Loci.get_entity_property(entity_id, "kind")
@@ -35,6 +40,104 @@ function on_player_join(entity_id)
     Loci.Commands.set_property(entity_id, "hp", "100")
     Loci.Commands.set_property(entity_id, "kind", "player")
     Loci.Commands.set_property(entity_id, "team", "1")
+end
+
+-- Inicialização da arena - criar obstáculos estáticos
+function on_init()
+    -- Paredes do mapa 100x100 (de -50 a 50, com espessura 2)
+    Loci.Commands.add_static_obstacle({
+        shape = { type = "aabb", min = { x = -52, y = -50 }, max = { x = -50, y = 50 } },
+        layer = SOLID_WALL,
+        mask = PLAYER | PROJECTILE,
+        is_solid = true
+    })  -- Parede esquerda
+    
+    Loci.Commands.add_static_obstacle({
+        shape = { type = "aabb", min = { x = 50, y = -50 }, max = { x = 52, y = 50 } },
+        layer = SOLID_WALL,
+        mask = PLAYER | PROJECTILE,
+        is_solid = true
+    })  -- Parede direita
+    
+    Loci.Commands.add_static_obstacle({
+        shape = { type = "aabb", min = { x = -50, y = -52 }, max = { x = 50, y = -50 } },
+        layer = SOLID_WALL,
+        mask = PLAYER | PROJECTILE,
+        is_solid = true
+    })  -- Parede superior
+    
+    Loci.Commands.add_static_obstacle({
+        shape = { type = "aabb", min = { x = -50, y = 50 }, max = { x = 50, y = 52 } },
+        layer = SOLID_WALL,
+        mask = PLAYER | PROJECTILE,
+        is_solid = true
+    })  -- Parede inferior
+    
+    -- Obstáculo circular central
+    Loci.Commands.add_static_obstacle({
+        shape = { type = "circle", center = { x = 0, y = 0 }, radius = 5.0 },
+        layer = SOLID_WALL,
+        mask = PLAYER | PROJECTILE,
+        is_solid = true
+    })
+    
+    -- Obstáculos nos cantos
+    Loci.Commands.add_static_obstacle({
+        shape = { type = "aabb", min = { x = -30, y = -30 }, max = { x = -25, y = -25 } },
+        layer = SOLID_WALL,
+        mask = PLAYER | PROJECTILE,
+        is_solid = true
+    })
+    
+    Loci.Commands.add_static_obstacle({
+        shape = { type = "aabb", min = { x = 25, y = -30 }, max = { x = 30, y = -25 } },
+        layer = SOLID_WALL,
+        mask = PLAYER | PROJECTILE,
+        is_solid = true
+    })
+    
+    Loci.Commands.add_static_obstacle({
+        shape = { type = "aabb", min = { x = -30, y = 25 }, max = { x = -25, y = 30 } },
+        layer = SOLID_WALL,
+        mask = PLAYER | PROJECTILE,
+        is_solid = true
+    })
+    
+    Loci.Commands.add_static_obstacle({
+        shape = { type = "aabb", min = { x = 25, y = 25 }, max = { x = 30, y = 30 } },
+        layer = SOLID_WALL,
+        mask = PLAYER | PROJECTILE,
+        is_solid = true
+    })
+    
+    -- Obstáculos no meio
+    Loci.Commands.add_static_obstacle({
+        shape = { type = "aabb", min = { x = -10, y = -20 }, max = { x = -5, y = -15 } },
+        layer = SOLID_WALL,
+        mask = PLAYER | PROJECTILE,
+        is_solid = true
+    })
+    
+    Loci.Commands.add_static_obstacle({
+        shape = { type = "aabb", min = { x = 5, y = -20 }, max = { x = 10, y = -15 } },
+        layer = SOLID_WALL,
+        mask = PLAYER | PROJECTILE,
+        is_solid = true
+    })
+    
+    Loci.Commands.add_static_obstacle({
+        shape = { type = "aabb", min = { x = -10, y = 15 }, max = { x = -5, y = 20 } },
+        layer = SOLID_WALL,
+        mask = PLAYER | PROJECTILE,
+        is_solid = true
+    })
+    
+    Loci.Commands.add_static_obstacle({
+        shape = { type = "aabb", min = { x = 5, y = 15 }, max = { x = 10, y = 20 } },
+        layer = SOLID_WALL,
+        mask = PLAYER | PROJECTILE,
+        is_solid = true
+    })
 end
 
 -- Callback quando o jogador tenta se mover
