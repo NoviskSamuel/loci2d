@@ -386,7 +386,10 @@ function love.draw()
             love.graphics.setLineWidth(5)
         end
         love.graphics.line(start_x, start_y, end_x, end_y)
-        love.graphics.circle("fill", end_x, end_y, 4 * alpha)
+        
+        -- Add green ball at the end of the beam (fireball visual)
+        love.graphics.setColor(0.2, 1.0, 0.2, alpha) -- Bright green
+        love.graphics.circle("fill", end_x, end_y, 8 * alpha)
         love.graphics.setLineWidth(1)
     end
 

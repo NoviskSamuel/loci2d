@@ -239,9 +239,12 @@ impl Instance {
         self.next_session_id += 1;
 
         let session = ClientSession::new(session_id, addr, entity_id, player_name.clone());
-        let entity = Entity::new(entity_id, player_name.clone(), EntityType::Player)
+        let mut entity = Entity::new(entity_id, player_name.clone(), EntityType::Player)
             .with_default_navigation(I16F16::from_num(1), I16F16::from_num(1))
             .with_circle_collider(I16F16::from_num(2));
+        
+        // Spawn at safe position (10, 10) to avoid obstacle collision
+        entity.position = DeterministicVector2::from_f64(10.0, 10.0);
 
         self.entities.insert(entity_id, entity);
         self.sessions.insert(addr, session);
