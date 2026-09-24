@@ -329,8 +329,15 @@ function love.draw()
         local pos_x = center_x + (entity.x - cam_x) * 10
         local pos_y = center_y + (entity.y - cam_y) * 10
 
-        -- Direct typed property access (Phase 6.5.3-1)
-        local team = entity.team
+        -- Render fireballs as green glowing circles
+        if entity.blueprint == "fireball" or (entity.properties and entity.properties.kind == "fireball") then
+            love.graphics.setColor(0.2, 1.0, 0.2, 1.0)
+            love.graphics.circle("fill", pos_x, pos_y, 8)
+            love.graphics.setColor(0.7, 1.0, 0.3, 0.8)
+            love.graphics.circle("line", pos_x, pos_y, 12)
+        else
+            -- Direct typed property access (Phase 6.5.3-1)
+            local team = entity.team
         if team == 1 or team == "1" then
             love.graphics.setColor(0.8, 0.3, 0.3) -- Team 1 Red
         elseif team == 2 or team == "2" then
@@ -368,6 +375,7 @@ function love.draw()
             love.graphics.setColor(1, 0.2, 0.2)
             love.graphics.print("HP: " .. tostring(hp), pos_x - 20, pos_y + 20)
         end
+        end  -- End of non-fireball rendering
     end
 
     -- Render transient action visual effects (Phase 6.5.3-1)
