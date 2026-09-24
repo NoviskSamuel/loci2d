@@ -229,14 +229,16 @@ function on_tick(tick)
             Loci.Commands.destroy_entity(fb.id)
             keep = false
         else
+            -- Verificar colisão manual com jogadores (evita colisão física que pode travar)
             local near = Loci.get_entities_in_radius(pos, HIT_RADIUS)
             for _, id in ipairs(near) do
                 if keep and id ~= fb.id and id ~= fb.owner then
                     local entity_kind = Loci.get_entity_property(id, "kind")
-                    if is_player(id) or entity_kind == "fireball" then
-                        if is_player(id) then
-                            apply_damage(id, FIREBALL_DAMAGE)
-                        end
+                    if is_player(id) then
+                        apply_damage(id, FIREBALL_DAMAGE)
+                        Loci.Commands.destroy_entity(fb.id)
+                        keep = false
+                    elseif entity_kind == "fireball" then
                         Loci.Commands.destroy_entity(fb.id)
                         keep = false
                     end
