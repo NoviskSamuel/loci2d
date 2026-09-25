@@ -156,20 +156,23 @@ function on_action(entity_id, ability_id, aim_x, aim_y)
         if pos then
             local px, py = pos:x_float(), pos:y_float()
             
-            -- Calcular direção baseada na mira
-            local len = math.sqrt(aim_x * aim_x + aim_y * aim_y)
+            -- Pegar velocidade atual do jogador para determinar direção
+            local vel = Loci.get_entity_velocity(entity_id)
+            local dir_x, dir_y = 1, 0  -- Direção padrão para direita
             
-            if len > 0 then
-                aim_x = aim_x / len
-                aim_y = aim_y / len
-            else
-                aim_x = 1
-                aim_y = 0
+            if vel then
+                local vx, vy = vel:x_float(), vel:y_float()
+                local len = math.sqrt(vx * vx + vy * vy)
+                
+                if len > 0.1 then  -- Se o jogador está se movendo
+                    dir_x = vx / len
+                    dir_y = vy / len
+                end
             end
             
-            -- Spawn da fireball com offset
-            local spawn_x = px + aim_x * FIREBALL_SPAWN_OFFSET
-            local spawn_y = py + aim_y * FIREBALL_SPAWN_OFFSET
+            -- Spawn da fireball com offset na direção do movimento
+            local spawn_x = px + dir_x * FIREBALL_SPAWN_OFFSET
+            local spawn_y = py + dir_y * FIREBALL_SPAWN_OFFSET
             
             local fireball_id = Loci.Commands.spawn_entity({
                 position = { x = spawn_x, y = spawn_y },
@@ -185,7 +188,7 @@ function on_action(entity_id, ability_id, aim_x, aim_y)
             })
             
             if fireball_id then
-                Loci.Commands.set_velocity(fireball_id, {x = aim_x * FIREBALL_SPEED, y = aim_y * FIREBALL_SPEED})
+                Loci.Commands.set_velocity(fireball_id, {x = dir_x * FIREBALL_SPEED, y = dir_y * FIREBALL_SPEED})
                 
                 fireballs[#fireballs + 1] = {
                     id = fireball_id,

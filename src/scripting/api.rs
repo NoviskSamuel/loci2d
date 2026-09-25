@@ -207,6 +207,16 @@ where
         })?;
         loci_table.set("get_entity_property", get_entity_property)?;
 
+        // Loci.get_entity_velocity(id)
+        let get_entity_velocity = scope.create_function(|_, id: u64| {
+            if let Some(entity) = instance.get_entity(id) {
+                Ok(entity.velocity)
+            } else {
+                Err(mlua::Error::RuntimeError(format!("Entity {} not found", id)))
+            }
+        })?;
+        loci_table.set("get_entity_velocity", get_entity_velocity)?;
+
         // Loci.get_global(key)
         let get_global =
             scope.create_function(|_, key: String| Ok(instance.globals.get(&key).cloned()))?;
