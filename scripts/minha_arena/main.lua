@@ -231,16 +231,7 @@ end
 
 -- Callback quando dois jogadores colidem
 function on_collision(entity_a_id, entity_b_id)
-    -- Se um deles é fireball, destruir
-    local kind_a = Loci.get_entity_property(entity_a_id, "kind")
-    local kind_b = Loci.get_entity_property(entity_b_id, "kind")
-    
-    if kind_a == "fireball" then
-        Loci.Commands.destroy_entity(entity_a_id)
-    end
-    if kind_b == "fireball" then
-        Loci.Commands.destroy_entity(entity_b_id)
-    end
+    -- Não faz nada - colisões de fireball são tratadas manualmente no on_tick
 end
 
 -- Tick loop
