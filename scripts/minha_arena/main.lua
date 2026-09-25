@@ -3,10 +3,10 @@ local fireballs = {}
 local current_tick = 0
 
 -- Configurações da fireball
-local FIREBALL_SPEED = 5.0  -- Igual à velocidade do jogador para gameplay mais controlável
+local FIREBALL_SPEED = 2.0  -- Igual à velocidade do jogador para gameplay mais controlável
 local FIREBALL_LIFETIME = 120  -- ticks (~4 segundos)
 local FIREBALL_DAMAGE = 10
-local FIREBALL_RADIUS = 0.5
+local FIREBALL_RADIUS = 2
 local FIREBALL_SPAWN_OFFSET = 0.0  -- Spawna dentro do jogador para garantir que pegue de perto
 local HIT_RADIUS = 5.0  -- Aumentado para 5.0 para detectar colisão melhor em toda a hitbox
 
@@ -231,7 +231,16 @@ end
 
 -- Callback quando dois jogadores colidem
 function on_collision(entity_a_id, entity_b_id)
-    -- Não faz nada - colisões de fireball são tratadas manualmente no on_tick
+    -- Se um deles é fireball, destruir
+    local kind_a = Loci.get_entity_property(entity_a_id, "kind")
+    local kind_b = Loci.get_entity_property(entity_b_id, "kind")
+    
+    if kind_a == "fireball" then
+        Loci.Commands.destroy_entity(entity_a_id)
+    end
+    if kind_b == "fireball" then
+        Loci.Commands.destroy_entity(entity_b_id)
+    end
 end
 
 -- Tick loop
