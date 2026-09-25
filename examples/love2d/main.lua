@@ -182,16 +182,32 @@ local function update_projectiles(dt)
                     st.dead = true
                     spawn_impact(st.px + (e.x - st.px) * t, st.py + (e.y - st.py) * t)
                 else
-                    local mx, my = e.x - st.px, e.y - st.py
-                    local len = math.sqrt(mx * mx + my * my)
-                    if len > 0.01 then
-                        st.dx, st.dy = mx / len, my / len
-                        table.insert(trail, {
-                            x = e.x, y = e.y, age = 0,
-                            ox = (math.random() - 0.5) * 2, oy = (math.random() - 0.5) * 2,
-                        })
+                    -- Verificar colisão com outras fireballs
+                    for _, other in ipairs(loci.get_entities()) do
+                        if is_projectile(other) and other.id ~= e.id then
+                            local dx = other.x - e.x
+                            local dy = other.y - e.y
+                            local dist = math.sqrt(dx * dx + dy * dy)
+                            if dist < PROJECTILE_RADIUS * 2 then
+                                st.dead = true
+                                spawn_impact(e.x, e.y)
+                                break
+                            end
+                        end
                     end
-                    st.px, st.py = e.x, e.y
+                    
+                    if not st.dead then
+                        local mx, my = e.x - st.px, e.y - st.py
+                        local len = math.sqrt(mx * mx + my * my)
+                        if len > 0.01 then
+                            st.dx, st.dy = mx / len, my / len
+                            table.insert(trail, {
+                                x = e.x, y = e.y, age = 0,
+                                ox = (math.random() - 0.5) * 2, oy = (math.random() - 0.5) * 2,
+                            })
+                        end
+                        st.px, st.py = e.x, e.y
+                    end
                 end
             end
         end
