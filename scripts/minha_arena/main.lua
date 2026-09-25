@@ -18,7 +18,7 @@ local SOLID_WALL = 1
 local PLAYER = 2
 local PROJECTILE = 8
 
--- Rastrear última direção de movimento para evitar resetar velocidade desnecessariamente
+-- Rastrear última direção de movimento para quando jogador estiver parado
 local last_move_directions = {}
 
 -- Função para verificar se uma entidade é um jogador
@@ -148,8 +148,11 @@ end
 
 -- Callback quando o jogador tenta se mover
 function on_move_intent(entity_id, dir_x, dir_y)
-    -- Usa set_navigation_target com alvo distante para movimento contínuo
+    -- Rastreia a última direção de movimento
     if dir_x ~= 0 or dir_y ~= 0 then
+        last_move_directions[entity_id] = {x = dir_x, y = dir_y}
+        
+        -- Usa set_navigation_target com alvo distante para movimento contínuo
         local pos = Loci.get_entity_position(entity_id)
         if pos then
             local px, py = pos:x_float(), pos:y_float()
@@ -184,6 +187,13 @@ function on_action(entity_id, ability_id, aim_x, aim_y)
                 if len > 0.1 then  -- Se o jogador está se movendo
                     dir_x = vx / len
                     dir_y = vy / len
+                else
+                    -- Se parado, usa última direção de movimento
+                    local last_dir = last_move_directions[entity_id]
+                    if last_dir then
+                        dir_x = last_dir.x
+                        dir_y = last_dir.y
+                    end
                 end
             end
             
