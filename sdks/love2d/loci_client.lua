@@ -317,9 +317,9 @@ function loci.update(dt)
                 entity.x = entity.server_x
                 entity.y = entity.server_y
             elseif dist2 > 0.001 then
-                -- Soft lerp
-                entity.x = entity.x + dx * 10.0 * dt
-                entity.y = entity.y + dy * 10.0 * dt
+                -- Soft lerp (reduzido de 10.0 para 5.0 para suavizar correções de colisão)
+                entity.x = entity.x + dx * 5.0 * dt
+                entity.y = entity.y + dy * 5.0 * dt
             else
                 -- Just move with velocity
                 entity.x = entity.x + entity.vx * dt
