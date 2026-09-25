@@ -21,6 +21,12 @@ local following_entity_id = nil
 local is_dragging = false
 local drag_last_x, drag_last_y = 0, 0
 
+-- Sistema de Dash - detecção de double-tap
+local last_key_time = {}
+local DASH_DOUBLE_TAP_TIME = 0.3  -- segundos entre presses para detectar double-tap
+local DASH_COOLDOWN = 1.0  -- segundos entre dashes
+local last_dash_time = 0
+
 -- Static obstacles for 100x100 map (manual definition since server doesn't send them)
 local static_obstacles = {
     -- Walls (100x100 map from -50 to 50, with 2 unit thickness)
@@ -383,6 +389,38 @@ function update_movement()
 end
 
 function love.keypressed(key)
+    -- Sistema de Dash - detecta double-tap
+    local current_time = love.timer.getTime()
+    local last_time = last_key_time[key] or 0
+    
+    if current_time - last_time < DASH_DOUBLE_TAP_TIME and current_time - last_dash_time > DASH_COOLDOWN then
+        -- Double-tap detectado - executar dash
+        local my_entity = loci.get_my_entity()
+        if my_entity then
+            local dir_x, dir_y = 0, 0
+            
+            -- Determinar direção baseada na tecla
+            if key == "w" or key == "up" then
+                dir_y = -1
+            elseif key == "s" or key == "down" then
+                dir_y = 1
+            elseif key == "a" or key == "left" then
+                dir_x = -1
+            elseif key == "d" or key == "right" then
+                dir_x = 1
+            end
+            
+            -- Enviar ação de dash (ability 2) com posição alvo distante
+            local dash_target_x = my_entity.x + dir_x * 100
+            local dash_target_y = my_entity.y + dir_y * 100
+            loci.send_action(2, dash_target_x, dash_target_y)
+            
+            last_dash_time = current_time
+        end
+    end
+    
+    last_key_time[key] = current_time
+
     if is_spectator_cli then
         if key == "r" or key == "space" then
             following_entity_id = nil
