@@ -3,11 +3,11 @@ local fireballs = {}
 local current_tick = 0
 
 -- Configurações da fireball
-local FIREBALL_SPEED = 20.0
+local FIREBALL_SPEED = 8.0  -- Reduzido de 20.0 para evitar tunneling através de paredes
 local FIREBALL_LIFETIME = 120  -- ticks (~4 segundos)
 local FIREBALL_DAMAGE = 10
 local FIREBALL_RADIUS = 0.5
-local FIREBALL_SPAWN_OFFSET = 1.0
+local FIREBALL_SPAWN_OFFSET = 0.5  -- Reduzido de 1.0 para spawnar mais perto do jogador
 local HIT_RADIUS = 3.0
 
 -- Configurações de movimento
