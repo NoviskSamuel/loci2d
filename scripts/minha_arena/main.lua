@@ -7,7 +7,7 @@ local FIREBALL_SPEED = 8.0  -- Reduzido de 20.0 para evitar tunneling através d
 local FIREBALL_LIFETIME = 120  -- ticks (~4 segundos)
 local FIREBALL_DAMAGE = 10
 local FIREBALL_RADIUS = 0.5
-local FIREBALL_SPAWN_OFFSET = 0.5  -- Reduzido de 1.0 para spawnar mais perto do jogador
+local FIREBALL_SPAWN_OFFSET = 0.2  -- Spawna bem perto do jogador para evitar atravessar obstáculos
 local HIT_RADIUS = 3.0
 
 -- Configurações de movimento
