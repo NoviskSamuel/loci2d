@@ -410,10 +410,10 @@ function love.keypressed(key)
                 dir_x = 1
             end
             
-            -- Enviar ação de dash (ability 2) com posição alvo distante
+            -- Enviar ação de dash (ability 3) com posição alvo distante
             local dash_target_x = my_entity.x + dir_x * 100
             local dash_target_y = my_entity.y + dir_y * 100
-            loci.send_action(2, dash_target_x, dash_target_y)
+            loci.send_action(3, dash_target_x, dash_target_y)
             
             last_dash_time = current_time
         end
