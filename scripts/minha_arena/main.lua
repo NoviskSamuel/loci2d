@@ -3,7 +3,7 @@ local fireballs = {}
 local current_tick = 0
 
 -- Configurações da fireball
-local FIREBALL_SPEED = 5.0
+local FIREBALL_SPEED = 20.0
 local FIREBALL_LIFETIME = 120  -- ticks (~4 segundos)
 local FIREBALL_DAMAGE = 10
 local FIREBALL_RADIUS = 0.5
@@ -11,7 +11,7 @@ local FIREBALL_SPAWN_OFFSET = 1.0
 local HIT_RADIUS = 3.0
 
 -- Configurações de movimento
-local PLAYER_SPEED = 1.0
+local PLAYER_SPEED = 5.0
 
 -- Configurações de colisão
 local SOLID_WALL = 1
@@ -145,7 +145,22 @@ end
 
 -- Callback quando o jogador tenta se mover
 function on_move_intent(entity_id, dir_x, dir_y)
-    Loci.Commands.set_velocity(entity_id, {x = dir_x * PLAYER_SPEED, y = dir_y * PLAYER_SPEED})
+    -- Usa set_navigation_target em vez de set_velocity para permitir wall sliding
+    -- O sistema de navegação do servidor lida melhor com colisões
+    if dir_x ~= 0 or dir_y ~= 0 then
+        local pos = Loci.get_entity_position(entity_id)
+        if pos then
+            local px, py = pos:x_float(), pos:y_float()
+            -- Calcula alvo na direção do movimento
+            local target_x = px + dir_x * 10
+            local target_y = py + dir_y * 10
+            Loci.Commands.set_navigation_target(entity_id, {x = target_x, y = target_y})
+        end
+    else
+        -- Se parado, para a navegação
+        Loci.Commands.set_velocity(entity_id, {x = 0, y = 0})
+    end
+    
     return true
 end
 
