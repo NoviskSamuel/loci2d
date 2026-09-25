@@ -18,6 +18,9 @@ local SOLID_WALL = 1
 local PLAYER = 2
 local PROJECTILE = 8
 
+-- Rastrear última direção de movimento para evitar resetar velocidade desnecessariamente
+local last_move_directions = {}
+
 -- Função para verificar se uma entidade é um jogador
 local function is_player(entity_id)
     local kind = Loci.get_entity_property(entity_id, "kind")
@@ -145,15 +148,14 @@ end
 
 -- Callback quando o jogador tenta se mover
 function on_move_intent(entity_id, dir_x, dir_y)
-    -- Usa set_navigation_target em vez de set_velocity para permitir wall sliding
-    -- O sistema de navegação do servidor lida melhor com colisões
+    -- Usa set_navigation_target com alvo distante para movimento contínuo
     if dir_x ~= 0 or dir_y ~= 0 then
         local pos = Loci.get_entity_position(entity_id)
         if pos then
             local px, py = pos:x_float(), pos:y_float()
-            -- Calcula alvo na direção do movimento
-            local target_x = px + dir_x * 10
-            local target_y = py + dir_y * 10
+            -- Alvo muito distante (100 unidades) para movimento contínuo
+            local target_x = px + dir_x * 100
+            local target_y = py + dir_y * 100
             Loci.Commands.set_navigation_target(entity_id, {x = target_x, y = target_y})
         end
     else
